@@ -2908,8 +2908,7 @@ static int sw42902_probe(struct device *dev)
 			PM_QOS_DEFAULT_VALUE);
 
 	if (boot_mode == TOUCH_CHARGER_MODE
-			|| boot_mode == TOUCH_LAF_MODE
-			|| boot_mode == TOUCH_RECOVERY_MODE) {
+			|| boot_mode == TOUCH_LAF_MODE) {
 		TOUCH_I("%s: boot_mode = %d\n", __func__, boot_mode);
 		sw42902_power(dev, POWER_OFF);
 		return 0;
@@ -4046,6 +4045,8 @@ static int sw42902_suspend(struct device *dev)
 	case TOUCH_NORMAL_BOOT:
 	case TOUCH_MINIOS_AAT:
 		break;
+    case TOUCH_RECOVERY_MODE:
+        break;
 	case TOUCH_MINIOS_MFTS_FOLDER:
 	case TOUCH_MINIOS_MFTS_FLAT:
 	case TOUCH_MINIOS_MFTS_CURVED:
@@ -4059,7 +4060,6 @@ static int sw42902_suspend(struct device *dev)
 		break;
 	case TOUCH_CHARGER_MODE:
 	case TOUCH_LAF_MODE:
-	case TOUCH_RECOVERY_MODE:
 		TOUCH_I("%s: Etc boot_mode(%d)!!!\n", __func__, boot_mode);
 		return -EPERM;
 	default:
@@ -4118,6 +4118,8 @@ static int sw42902_resume(struct device *dev)
 	case TOUCH_NORMAL_BOOT:
 	case TOUCH_MINIOS_AAT:
 		break;
+    case TOUCH_RECOVERY_MODE:
+        break;
 	case TOUCH_MINIOS_MFTS_FOLDER:
 	case TOUCH_MINIOS_MFTS_FLAT:
 	case TOUCH_MINIOS_MFTS_CURVED:
@@ -4149,7 +4151,6 @@ static int sw42902_resume(struct device *dev)
 		break;
 	case TOUCH_CHARGER_MODE:
 	case TOUCH_LAF_MODE:
-	case TOUCH_RECOVERY_MODE:
 		TOUCH_I("%s: Etc boot_mode(%d)!!!\n", __func__, boot_mode);
 		sw42902_sleep_ctrl(dev, IC_DEEP_SLEEP);
 		return -EPERM;

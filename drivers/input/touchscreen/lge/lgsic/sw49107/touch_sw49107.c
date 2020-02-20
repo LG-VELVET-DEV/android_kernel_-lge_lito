@@ -1531,8 +1531,7 @@ static int sw49107_notify(struct device *dev, ulong event, void *data)
 
 	boot_mode = touch_check_boot_mode(dev);
 	if (boot_mode == TOUCH_CHARGER_MODE
-			|| boot_mode == TOUCH_LAF_MODE
-			|| boot_mode == TOUCH_RECOVERY_MODE) {
+			|| boot_mode == TOUCH_LAF_MODE) {
 		TOUCH_I("Notify Skip MODE notify. %d\n", boot_mode);
 		return sw49107_notify_etc(dev,event,data);
 	}
@@ -1691,8 +1690,7 @@ static int sw49107_probe(struct device *dev)
 
 	boot_mode = touch_check_boot_mode(dev);
 	if (boot_mode == TOUCH_CHARGER_MODE
-			|| boot_mode == TOUCH_LAF_MODE
-			|| boot_mode == TOUCH_RECOVERY_MODE) {
+			|| boot_mode == TOUCH_LAF_MODE) {
 		TOUCH_I("%s: boot_mode = %d\n", __func__, boot_mode);
 		ret = touch_gpio_init(ts->reset_pin, "touch_reset");
 		if (ret < 0) {
@@ -2183,8 +2181,7 @@ static int sw49107_suspend(struct device *dev)
 
 	boot_mode = touch_check_boot_mode(dev);
 	if (boot_mode == TOUCH_CHARGER_MODE
-			|| boot_mode == TOUCH_LAF_MODE
-			|| boot_mode == TOUCH_RECOVERY_MODE) {
+			|| boot_mode == TOUCH_LAF_MODE) {
 		TOUCH_I("%s: boot_mode = %d\n", __func__, boot_mode);
 		return -EPERM;
 	}
@@ -2254,8 +2251,7 @@ static int sw49107_resume(struct device *dev)
 #endif
 	boot_mode = touch_check_boot_mode(dev);
 	if (boot_mode == TOUCH_CHARGER_MODE
-			|| boot_mode == TOUCH_LAF_MODE
-			|| boot_mode == TOUCH_RECOVERY_MODE) {
+			|| boot_mode == TOUCH_LAF_MODE) {
 		TOUCH_I("%s: boot_mode = %d\n", __func__, boot_mode);
 		return -EPERM;
 	}
