@@ -50,7 +50,9 @@
 #include "ufs-sysfs.h"
 #include "ufs-debugfs.h"
 #include "ufs-qcom.h"
-
+#ifdef CONFIG_LFS_UFS
+#include "ufsdbg-print.h"
+#endif
 static bool ufshcd_wb_sup(struct ufs_hba *hba);
 static int ufshcd_wb_ctrl(struct ufs_hba *hba, bool enable);
 static int ufshcd_wb_buf_flush_enable(struct ufs_hba *hba);
@@ -422,6 +424,20 @@ static inline bool ufshcd_is_valid_pm_lvl(int lvl)
 
 static struct ufs_dev_fix ufs_fixups[] = {
 	/* UFS cards deviations table */
+#ifdef CONFIG_LFS_UFS
+	/* Toshiba recommend that we should not use FASTAUTO in Toshiba-UFS-Gen3.
+	 */
+	UFS_FIX(UFS_VENDOR_TOSHIBA, "THGLF2G8J4LBATR", UFS_DEVICE_NO_FASTAUTO),
+	/* HOST got numerous NAC on some SAMSUNG UFS */
+	UFS_FIX(UFS_VENDOR_SAMSUNG, UFS_ANY_MODEL,
+		UFS_DEVICE_QUIRK_RECOVERY_FROM_DL_NAC_ERRORS),
+	UFS_FIX(UFS_VENDOR_MICRON, UFS_ANY_MODEL,
+		UFS_DEVICE_QUIRK_NO_LINK_OFF),
+	UFS_FIX(UFS_VENDOR_MICRON, UFS_ANY_MODEL,
+		UFS_DEVICE_NO_FASTAUTO),
+	UFS_FIX(UFS_VENDOR_SAMSUNG, UFS_ANY_MODEL,
+		UFS_DEVICE_QUIRK_NO_LINK_OFF),
+#endif
 	UFS_FIX(UFS_VENDOR_SAMSUNG, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM),
 	UFS_FIX(UFS_VENDOR_SAMSUNG, UFS_ANY_MODEL,
@@ -444,8 +460,13 @@ static struct ufs_dev_fix ufs_fixups[] = {
 	UFS_FIX(UFS_VENDOR_TOSHIBA, "THGLF2G9D8KBADG",
 		UFS_DEVICE_QUIRK_PA_TACTIVATE),
 	UFS_FIX(UFS_VENDOR_SKHYNIX, UFS_ANY_MODEL, UFS_DEVICE_NO_VCCQ),
+#ifdef CONFIG_LFS_UFS
+	UFS_FIX(UFS_ANY_VENDOR, UFS_ANY_MODEL,
+		UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME),
+#else
 	UFS_FIX(UFS_VENDOR_SKHYNIX, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME),
+#endif
 	UFS_FIX(UFS_VENDOR_SKHYNIX, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_WAIT_AFTER_REF_CLK_UNGATE),
 	UFS_FIX(UFS_VENDOR_SKHYNIX, "hB8aL1",
@@ -479,8 +500,11 @@ static int ufshcd_disable_clocks(struct ufs_hba *hba,
 				 bool is_gating_context);
 static int ufshcd_disable_clocks_keep_link_active(struct ufs_hba *hba,
 					      bool is_gating_context);
-static void ufshcd_hold_all(struct ufs_hba *hba);
+#if defined(CONFIG_UFSFEATURE)
+void ufshcd_release_all(struct ufs_hba *hba);
+#else
 static void ufshcd_release_all(struct ufs_hba *hba);
+#endif
 static int ufshcd_set_vccq_rail_unused(struct ufs_hba *hba, bool unused);
 static inline void ufshcd_add_delay_before_dme_cmd(struct ufs_hba *hba);
 static inline void ufshcd_save_tstamp_of_last_dme_cmd(struct ufs_hba *hba);
@@ -488,8 +512,11 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba);
 static void ufshcd_resume_clkscaling(struct ufs_hba *hba);
 static void ufshcd_suspend_clkscaling(struct ufs_hba *hba);
 static void __ufshcd_suspend_clkscaling(struct ufs_hba *hba);
+#if defined(CONFIG_UFSFEATURE)
+void ufshcd_hold_all(struct ufs_hba *hba);
+#else
 static void ufshcd_hold_all(struct ufs_hba *hba);
-static void ufshcd_release_all(struct ufs_hba *hba);
+#endif
 static void ufshcd_hba_vreg_set_lpm(struct ufs_hba *hba);
 static void ufshcd_hba_vreg_set_hpm(struct ufs_hba *hba);
 static int ufshcd_devfreq_target(struct device *dev,
@@ -871,8 +898,13 @@ static void ufshcd_print_uic_err_hist(struct ufs_hba *hba,
 
 		if (err_hist->reg[p] == 0)
 			continue;
+#ifdef CONFIG_LFS_UFS
+		print_ufs_error_spec(hba, err_name, err_hist->reg[p],
+			ktime_to_us(err_hist->tstamp[p]), i);
+#else
 		dev_err(hba->dev, "%s[%d] = 0x%x at %lld us\n", err_name, i,
 			err_hist->reg[p], ktime_to_us(err_hist->tstamp[p]));
+#endif
 	}
 }
 
@@ -2951,13 +2983,21 @@ static void ufshcd_exit_hibern8_on_idle(struct ufs_hba *hba)
 	device_remove_file(hba->dev, &hba->hibern8_on_idle.enable_attr);
 }
 
+#if defined(CONFIG_UFSFEATURE)
+void ufshcd_hold_all(struct ufs_hba *hba)
+#else
 static void ufshcd_hold_all(struct ufs_hba *hba)
+#endif
 {
 	ufshcd_hold(hba, false);
 	ufshcd_hibern8_hold(hba, false);
 }
 
+#if defined(CONFIG_UFSFEATURE)
+void ufshcd_release_all(struct ufs_hba *hba)
+#else
 static void ufshcd_release_all(struct ufs_hba *hba)
+#endif
 {
 	ufshcd_hibern8_release(hba, false);
 	ufshcd_release(hba, false);
@@ -3564,6 +3604,10 @@ static int ufshcd_comp_scsi_upiu(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 		lrbp->command_type = UTP_CMD_TYPE_UFS_STORAGE;
 
 	if (likely(lrbp->cmd)) {
+#if defined(CONFIG_UFSFEATURE)
+		if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+			ufsf_tw_prep_fn(&hba->ufsf, lrbp);
+#endif
 		ret = ufshcd_prepare_req_desc_hdr(hba, lrbp,
 				&upiu_flags, lrbp->cmd->sc_data_direction);
 		ufshcd_prepare_utp_scsi_cmd_upiu(lrbp, upiu_flags);
@@ -4016,8 +4060,13 @@ static inline void ufshcd_put_dev_cmd_tag(struct ufs_hba *hba, int tag)
  * NOTE: Since there is only one available tag for device management commands,
  * it is expected you hold the hba->dev_cmd.lock mutex.
  */
+#if defined(CONFIG_UFSFEATURE)
+int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
+			enum dev_cmd_type cmd_type, int timeout)
+#else
 static int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
-		enum dev_cmd_type cmd_type, int timeout)
+ 		enum dev_cmd_type cmd_type, int timeout)
+#endif
 {
 	struct ufshcd_lrb *lrbp;
 	int err;
@@ -4579,18 +4628,53 @@ static inline int ufshcd_read_desc(struct ufs_hba *hba,
 	return ufshcd_read_desc_param(hba, desc_id, desc_index, 0, buf, size);
 }
 
+
+#ifdef CONFIG_LFS_UFS
+int ufshcd_read_power_desc(struct ufs_hba *hba,
+					 u8 *buf,
+					 u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_POWER, 0, buf, size);
+}
+#else
 static inline int ufshcd_read_power_desc(struct ufs_hba *hba,
 					 u8 *buf,
 					 u32 size)
 {
 	return ufshcd_read_desc(hba, QUERY_DESC_IDN_POWER, 0, buf, size);
 }
-
+#endif
 int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size)
 {
 	return ufshcd_read_desc(hba, QUERY_DESC_IDN_DEVICE, 0, buf, size);
 }
 
+#ifdef CONFIG_LFS_UFS
+int ufshcd_read_geo_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_GEOMETRY, 0, buf, size);
+}
+
+int ufshcd_read_config_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_CONFIGURATION, 0, buf, size);
+}
+
+int ufshcd_read_unit_desc(struct ufs_hba *hba, int u_index, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_UNIT, u_index, buf, size);
+}
+
+int ufshcd_read_inter_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_INTERCONNECT, 0, buf, size);
+}
+
+int ufshcd_read_health_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0, buf, size);
+}
+#endif
 /**
  * ufshcd_read_string_desc - read string descriptor
  * @hba: pointer to adapter instance
@@ -6171,6 +6255,18 @@ static int ufshcd_slave_configure(struct scsi_device *sdev)
 	struct request_queue *q = sdev->request_queue;
 	struct ufs_hba *hba = shost_priv(sdev->host);
 
+#if defined(CONFIG_UFSFEATURE)
+	if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG){
+		struct ufsf_feature *ufsf = &hba->ufsf;
+
+		if (ufsf_is_valid_lun(sdev->lun)) {
+			ufsf->sdev_ufs_lu[sdev->lun] = sdev;
+			ufsf->slave_conf_cnt++;
+			printk(KERN_ERR "%s: ufsfeature set lun %d sdev %p q %p\n",
+				   __func__, (int)sdev->lun, sdev, sdev->request_queue);
+		}
+	}
+#endif
 	blk_queue_update_dma_pad(q, PRDT_DATA_BYTE_COUNT_PAD - 1);
 	blk_queue_max_segment_size(q, PRDT_DATA_BYTE_COUNT_MAX);
 
@@ -7466,7 +7562,17 @@ static irqreturn_t ufshcd_update_uic_error(struct ufs_hba *hba)
 						__func__, reg);
 					hba->full_init_linereset = true;
 				}
+#ifdef CONFIG_LFS_UFS
+                else{
+                  dev_err(hba->dev, "%s: LINERESET during cmd=0x%x, reg 0x%x\n",__func__, cmd->command, reg);
+                }
+#endif
 			}
+#ifdef CONFIG_LFS_UFS
+            else{
+              dev_err(hba->dev, "%s: LINERESET during cmd=NULL, reg 0x%x\n", __func__, reg);
+            }
+#endif
 			if (!hba->full_init_linereset)
 				queue_work(hba->recovery_wq, &hba->rls_work);
 		}
@@ -7858,6 +7964,10 @@ static int ufshcd_eh_device_reset_handler(struct scsi_cmnd *cmd)
 out:
 	hba->req_abort_count = 0;
 	if (!err) {
+#if defined(CONFIG_UFSFEATURE)
+		if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+			ufsf_tw_reset_lu(&hba->ufsf);
+#endif
 		err = SUCCESS;
 	} else {
 		dev_err(hba->dev, "%s: failed with err %d\n", __func__, err);
@@ -8153,6 +8263,9 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 	unsigned long flags;
 	int retries = MAX_HOST_RESET_RETRIES;
 
+#ifdef CONFIG_LFS_UFS
+	dev_err(hba->dev, "%s: [LGE] start reset to restore host and device\n", __func__);
+#endif
 	ufshcd_enable_irq(hba);
 
 	do {
@@ -8569,7 +8682,14 @@ static void ufs_fixup_device_setup(struct ufs_hba *hba,
 		     f->w_manufacturer_id == UFS_ANY_VENDOR) &&
 		    (STR_PRFX_EQUAL(f->model, dev_desc->model) ||
 		     !strcmp(f->model, UFS_ANY_MODEL)))
+#ifdef CONFIG_LFS_UFS
+			{
+				dev_err(hba->dev, "[LGE][UFS] update quirks, manufacturerid:%d, model:%s, quirk:0x%x\n", f->w_manufacturer_id, f->model, f->quirk);
+				hba->dev_info.quirks |= f->quirk;
+			}
+#else
 			hba->dev_info.quirks |= f->quirk;
+#endif
 	}
 }
 
@@ -9032,6 +9152,10 @@ reinit:
 		/* Reset the host controller */
 		spin_lock_irqsave(hba->host->host_lock, flags);
 		ufshcd_hba_stop(hba, false);
+#if defined(CONFIG_UFSFEATURE)
+		if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+			ufsf_tw_reset_host(&hba->ufsf);
+#endif
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 		err = ufshcd_hba_enable(hba);
@@ -9139,8 +9263,15 @@ reinit:
 			hba->clk_scaling.is_allowed = true;
 			hba->clk_scaling.is_suspended = false;
 		}
-
+#if defined(CONFIG_UFSFEATURE)
+		if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+			ufsf_device_check(hba);
+#endif
 		scsi_scan_host(hba->host);
+#if defined(CONFIG_UFSFEATURE)
+		if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+			ufsf_tw_init(&hba->ufsf);
+#endif
 		pm_runtime_put_sync(hba->dev);
 	}
 
@@ -9162,6 +9293,10 @@ out:
 	 */
 	if (ret && !ufshcd_eh_in_progress(hba) && !hba->pm_op_in_progress)
 		pm_runtime_put_sync(hba->dev);
+#if defined(CONFIG_UFSFEATURE)
+	if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+		ufsf_tw_reset(&hba->ufsf);
+#endif
 
 	trace_ufshcd_init(dev_name(hba->dev), ret,
 		ktime_to_us(ktime_sub(ktime_get(), start)),
@@ -9259,7 +9394,15 @@ static int ufshcd_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 			__func__, err);
 		goto out_release_mem;
 	}
-
+#if defined(CONFIG_UFSFEATURE)
+	if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG){
+		if (ufsf_check_query(ioctl_data->opcode)) {
+			err = ufsf_query_ioctl(&hba->ufsf, lun, buffer, ioctl_data,
+						   UFSFEATURE_SELECTOR);
+			goto out_release_mem;
+		}
+	}
+#endif
 	/* verify legal parameters & send query */
 	switch (ioctl_data->opcode) {
 	case UPIU_QUERY_OPCODE_READ_DESC:
@@ -10311,7 +10454,10 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		req_dev_pwr_mode = UFS_POWERDOWN_PWR_MODE;
 		req_link_state = UIC_LINK_OFF_STATE;
 	}
-
+#if defined(CONFIG_UFSFEATURE)
+	if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+		ufsf_tw_suspend(&hba->ufsf);
+#endif
 	/*
 	 * If we can't transition into any of the low power modes
 	 * just gate the clocks.
@@ -10724,6 +10870,118 @@ int ufshcd_runtime_idle(struct ufs_hba *hba)
 }
 EXPORT_SYMBOL(ufshcd_runtime_idle);
 
+#ifdef CONFIG_LFS_UFS_SYSFS_COMMON
+extern void ufsdbg_print_micron_device_report_write(struct ufs_hba *hba);
+extern void ufsdbg_print_micron_device_report_read_buffer(struct ufs_hba *hba,char *buf);
+static ssize_t ufsdbg_vendor_health_desc_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_MICRON)
+	{
+		ufsdbg_print_micron_device_report_write(hba);
+		ufsdbg_print_micron_device_report_read_buffer(hba,buf);
+	}else
+	{
+		return 0;
+	}
+
+	return strlen(buf);
+}
+
+static ssize_t ufsdbg_vendor_health_desc_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+
+static void ufsdbg_add_vendor_health_desc_sysfs_node(struct ufs_hba *hba)
+{
+	hba->vendor_health_desc_attr.show = ufsdbg_vendor_health_desc_show;
+	hba->vendor_health_desc_attr.store = ufsdbg_vendor_health_desc_store;
+	sysfs_attr_init(&hba->vendor_health_desc_attr.attr);
+	hba->vendor_health_desc_attr.attr.name = "vendor_health_desc";
+	hba->vendor_health_desc_attr.attr.mode = S_IRUGO;
+	if (device_create_file(hba->dev, &hba->vendor_health_desc_attr))
+		dev_err(hba->dev, "Failed to create sysfs for vendor_health_desc_attr\n");
+}
+
+static ssize_t ufsdbg_ufs_uic_err_desc_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	int curr_len = 0;
+
+	curr_len = sprintf(buf,"UIC_PHY_ADAPTER_LAYER_ERROR Count = %d :UIC_DATA_LINK_LAYER_ERROR Count = %d :UIC_DME_ERROR Count = %d:LINE_RESET Count = %d :\n",hba->ufs_stats.pa_err_cnt_total,hba->ufs_stats.dl_err_cnt_total,hba->ufs_stats.dme_err_cnt,hba->ufs_stats.pa_err_cnt[UFS_EC_PA_LINE_RESET]);
+
+	return curr_len;
+
+}
+
+static ssize_t ufsdbg_ufs_uic_err_desc_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+
+static void ufsdbg_add_ufs_uic_err_desc_sysfs_node(struct ufs_hba *hba)
+{
+	hba->ufs_uic_err_desc_attr.show = ufsdbg_ufs_uic_err_desc_show;
+	hba->ufs_uic_err_desc_attr.store = ufsdbg_ufs_uic_err_desc_store;
+	sysfs_attr_init(&hba->ufs_uic_err_desc_attr.attr);
+	hba->ufs_uic_err_desc_attr.attr.name = "ufs_uic_err_desc";
+	hba->ufs_uic_err_desc_attr.attr.mode = S_IRUGO;
+	if (device_create_file(hba->dev, &hba->ufs_uic_err_desc_attr))
+		dev_err(hba->dev, "Failed to create sysfs for ufs_uic_err_desc_attr\n");
+}
+
+static ssize_t ufsdbg_health_desc_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int err = 0;
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	int curr_len = 0;
+	int buff_len = QUERY_DESC_HEALTH_DEF_SIZE;
+	u8 desc_buf[QUERY_DESC_HEALTH_DEF_SIZE];
+
+	pm_runtime_get_sync(hba->dev);
+	err = ufshcd_read_health_desc(hba, desc_buf, buff_len);
+	pm_runtime_put_sync(hba->dev);
+
+	if (!err) {
+		curr_len = sprintf(buf, "bLength %d bDescriptorIDN %d bPreEOLInfo %d bDeviceLifeTimeEstA %d bDeviceLifeTimeEstB %d\n",
+			desc_buf[0], desc_buf[1], desc_buf[2], desc_buf[3], desc_buf[4]);
+	}
+
+	return curr_len;
+}
+
+static ssize_t ufsdbg_health_desc_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+
+static void ufsdbg_add_health_desc_sysfs_node(struct ufs_hba *hba)
+{
+	hba->health_desc_attr.show = ufsdbg_health_desc_show;
+	hba->health_desc_attr.store = ufsdbg_health_desc_store;
+	sysfs_attr_init(&hba->health_desc_attr.attr);
+	hba->health_desc_attr.attr.name = "health_desc";
+	hba->health_desc_attr.attr.mode = S_IRUGO;
+	if (device_create_file(hba->dev, &hba->health_desc_attr))
+		dev_err(hba->dev, "Failed to create sysfs for health_desc_attr\n");
+}
+
+static void ufsdbg_add_sysfs_nodes(struct ufs_hba *hba)
+{
+	ufsdbg_add_health_desc_sysfs_node(hba);
+	ufsdbg_add_vendor_health_desc_sysfs_node(hba);
+	ufsdbg_add_ufs_uic_err_desc_sysfs_node(hba);
+}
+#endif
+
 static void __ufshcd_shutdown_clkscaling(struct ufs_hba *hba)
 {
 	bool suspend = false;
@@ -10813,6 +11071,10 @@ EXPORT_SYMBOL(ufshcd_shutdown);
  */
 void ufshcd_remove(struct ufs_hba *hba)
 {
+#if defined(CONFIG_UFSFEATURE)
+	if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+		ufsf_tw_release(&hba->ufsf);
+#endif
 	ufs_sysfs_remove_nodes(hba->dev);
 	scsi_remove_host(hba->host);
 	/* disable interrupts */
@@ -10902,6 +11164,39 @@ out_error:
 }
 EXPORT_SYMBOL(ufshcd_alloc_host);
 
+#ifdef CONFIG_LFS_UFS_SYSFS_COMMON
+#include <linux/proc_fs.h>
+static struct proc_dir_entry*	procfs_root;
+
+bool ufsdbg_procfs_create(struct ufs_hba* hba)
+{
+	#define UFSDBG_PROCFS_ROOT    "storage"	/* /proc/storage/ufs */
+	struct proc_dir_entry*	root;
+	char name[64];
+
+	if (!hba)
+		return false;
+
+	root = proc_mkdir(UFSDBG_PROCFS_ROOT, NULL);
+	if (NULL != root) {
+		sprintf(name, "/sys/devices/platform/soc/%s", dev_name(hba->dev));
+		if (!proc_symlink("ufs", root, name)) {
+			return false;
+		}
+	}
+
+	procfs_root = root;
+	return true;
+}
+
+bool ufsdbg_procfs_destroy(struct ufs_hba* hba)
+{
+	if (procfs_root)
+		proc_remove(procfs_root);
+
+	return true;
+}
+#endif
 /**
  * ufshcd_init - Driver initialization routine
  * @hba: per-adapter instance
@@ -10980,6 +11275,10 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	host->set_dbd_for_caching = 1;
 
 	hba->max_pwr_info.is_valid = false;
+
+#ifdef CONFIG_LFS_SCSI_DEVICE_IDENTIFIER
+	host->by_ufs = 1;
+#endif
 
 	/* Initailize wait queue for task management */
 	init_waitqueue_head(&hba->tm_wq);
@@ -11110,6 +11409,11 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	ufshcd_set_ufs_dev_active(hba);
 
 	ufshcd_cmd_log_init(hba);
+#if defined(CONFIG_UFSFEATURE)
+	if(hba->dev_info.w_manufacturer_id == UFS_VENDOR_SAMSUNG)
+		ufsf_tw_set_init_state(&hba->ufsf);
+#endif
+
 
 	async_schedule(ufshcd_async_scan, hba);
 
@@ -11117,7 +11421,12 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 
 	ufs_sysfs_add_nodes(hba->dev);
 
+#ifdef CONFIG_LFS_UFS_SYSFS_COMMON
+	ufsdbg_add_sysfs_nodes(hba);
+	ufsdbg_procfs_create(hba);
+#endif
 	return 0;
+
 
 out_remove_scsi_host:
 	scsi_remove_host(hba->host);

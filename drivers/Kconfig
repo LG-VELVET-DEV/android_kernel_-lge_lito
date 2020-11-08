@@ -230,4 +230,9 @@ source "drivers/sensors/Kconfig"
 source "drivers/gpu/msm/Kconfig"
 
 source "drivers/energy_model/Kconfig"
+
+source "drivers/tspdrv/Kconfig"
+
+source "drivers/gud/Kconfig"
+
 endmenu

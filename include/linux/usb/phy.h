@@ -26,6 +26,9 @@
 #define PHY_HSFS_MODE		BIT(8)
 #define PHY_LS_MODE		BIT(9)
 #define PHY_USB_DP_CONCURRENT_MODE	BIT(10)
+#ifdef CONFIG_LGE_USB
+#define COMPLIANCE_MODE		BIT(11)
+#endif
 
 enum usb_phy_interface {
 	USBPHY_INTERFACE_MODE_UNKNOWN,

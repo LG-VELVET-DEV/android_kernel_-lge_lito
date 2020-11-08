@@ -58,6 +58,9 @@
 #include <asm/mmu_context.h>
 #include <asm/processor.h>
 #include <asm/stacktrace.h>
+#ifdef CONFIG_MACH_LGE
+#include <linux/console.h>
+#endif
 
 #ifdef CONFIG_STACKPROTECTOR
 #include <linux/stackprotector.h>
@@ -72,6 +75,12 @@ void (*pm_power_off)(void);
 EXPORT_SYMBOL_GPL(pm_power_off);
 
 void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
+
+
+#ifdef CONFIG_LGE_POWEROFF_TIMEOUT
+void (*pm_power_off_timeout)(void);
+void (*arm_pm_restart_timeout)(enum reboot_mode reboot_mode, const char *cmd);
+#endif
 
 /*
  * This is our default idle handler.
@@ -145,6 +154,14 @@ void machine_power_off(void)
 		pm_power_off();
 }
 
+#ifdef CONFIG_LGE_POWEROFF_TIMEOUT
+void machine_power_off_timeout(void)
+{
+	if (pm_power_off_timeout)
+		pm_power_off_timeout();
+}
+#endif
+
 /*
  * Restart requires that the secondary CPUs stop performing any activity
  * while the primary CPU resets the system. Systems with multiple CPUs must
@@ -212,6 +229,14 @@ static void print_pstate(struct pt_regs *regs)
 			pstate & PSR_UAO_BIT ? '+' : '-');
 	}
 }
+
+#ifdef CONFIG_LGE_POWEROFF_TIMEOUT
+void machine_restart_timeout(char *cmd)
+{
+       if (arm_pm_restart_timeout)
+	      arm_pm_restart_timeout(reboot_mode, cmd);
+}
+#endif
 
 /*
  * dump a block of kernel memory from around the given address

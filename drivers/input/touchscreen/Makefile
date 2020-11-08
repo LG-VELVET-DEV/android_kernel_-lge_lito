@@ -112,4 +112,6 @@ obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 obj-$(CONFIG_TOUCHSCREEN_ST)		+= st/
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX) += synaptics_dsx/
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm/
+obj-$(CONFIG_LGE_TOUCH_CORE)            += lge/
+obj-$(CONFIG_LGE_TOUCH_CORE_SUB)	+= lge_sub/
 obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/

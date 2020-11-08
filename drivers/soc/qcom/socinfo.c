@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2019, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -21,6 +21,10 @@
 #include <soc/qcom/socinfo.h>
 #include <linux/soc/qcom/smem.h>
 #include <soc/qcom/boot_stats.h>
+
+#ifdef CONFIG_MACH_LGE
+#include <soc/qcom/lge/board_lge.h>
+#endif
 
 #define BUILD_ID_LENGTH 32
 #define CHIP_ID_LENGTH 32
@@ -328,7 +332,6 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* Lagoon ID */
 	[434] = {MSM_CPU_LAGOON, "LAGOON"},
-	[459] = {MSM_CPU_LAGOON, "LAGOON"},
 
 	/* Bengalp ID */
 	[445] = {MSM_CPU_BENGALP, "BENGALP"},
@@ -741,7 +744,7 @@ msm_get_serial_number(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return snprintf(buf, PAGE_SIZE, "0x%08x\n",
 		socinfo_get_serial_number());
 }
 
@@ -1059,6 +1062,52 @@ msm_get_images(struct device *dev,
 	return pos;
 }
 
+#ifdef CONFIG_MACH_LGE
+static ssize_t
+msm_get_hw_rev(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	enum hw_rev_no revid = lge_get_board_rev_no();
+
+	pr_err("hw_rev called'\n");
+	pr_err("hw_rev id:%d\n",revid);
+	pr_err("hw_rev :%s",lge_get_board_revision());
+
+	return snprintf(buf, PAGE_SIZE, "%-.32s\n", lge_get_board_revision());
+}
+static ssize_t
+msm_get_hw_subrev(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+#if defined(CONFIG_MACH_LITO_CAYMANLM)
+	/*
+	 * PCB_SUB_REV_3(PM7250B GPIO05) :
+	 *     20K(with proximity sensor rubber) return 1
+	 */
+	int vari_main = lge_get_vari_main();
+
+	pr_err("hw_subrev(vari_main) called'\n");
+	pr_err("hw_subrev(vari_main) id:%d\n", vari_main);
+	pr_err("hw_subrev :%s", lge_get_board_subrevision());
+
+	if (vari_main == 0)
+		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+				lge_get_board_subrevision());
+	else
+		return snprintf(buf, PAGE_SIZE, "%-.32s\n", "subrev_3");
+#else
+	enum hw_subrev_no sub_revid = lge_get_board_subrev_no();
+
+	pr_err("hw_subrev called'\n");
+	pr_err("hw_subrev id:%d\n",sub_revid);
+	pr_err("hw_subrev :%s",lge_get_board_subrevision());
+
+	return snprintf(buf, PAGE_SIZE, "%-.32s\n", lge_get_board_subrevision());
+#endif
+
+}
+#endif
+
 static struct device_attribute msm_soc_attr_raw_version =
 	__ATTR(raw_version, 0444, msm_get_raw_version,  NULL);
 
@@ -1168,6 +1217,13 @@ static struct device_attribute select_image =
 
 static struct device_attribute images =
 	__ATTR(images, 0444, msm_get_images, NULL);
+
+#ifdef CONFIG_MACH_LGE
+static struct device_attribute msm_soc_attr_hw_rev =
+	__ATTR(hw_rev, S_IRUGO, msm_get_hw_rev, NULL);
+static struct device_attribute msm_soc_attr_hw_subrev =
+	__ATTR(hw_subrev, S_IRUGO, msm_get_hw_subrev, NULL);
+#endif
 
 static void * __init setup_dummy_socinfo(void)
 {
@@ -1315,6 +1371,12 @@ static void __init populate_soc_sysfs_files(struct device *msm_soc_device)
 	case SOCINFO_VERSION(0, 1):
 		device_create_file(msm_soc_device,
 					&msm_soc_attr_build_id);
+#ifdef CONFIG_MACH_LGE
+		device_create_file(msm_soc_device,
+					&msm_soc_attr_hw_rev);
+		device_create_file(msm_soc_device,
+					&msm_soc_attr_hw_subrev);
+#endif
 		break;
 	default:
 		pr_err("Unknown socinfo format: v%u.%u\n",

@@ -1228,7 +1228,7 @@ exit:
 	return ret;
 }
 
-static int qseecom_destroy_bridge_callback(
+int qseecom_destroy_bridge_callback(
 				struct dma_buf *dmabuf, void *dtor_data)
 {
 	int ret = 0;
@@ -1247,8 +1247,9 @@ static int qseecom_destroy_bridge_callback(
 	dma_buf_set_destructor(dmabuf, NULL, NULL);
 	return ret;
 }
+EXPORT_SYMBOL(qseecom_destroy_bridge_callback);
 
-static int qseecom_create_bridge_for_secbuf(int ion_fd, struct dma_buf *dmabuf,
+int qseecom_create_bridge_for_secbuf(int ion_fd, struct dma_buf *dmabuf,
 				struct sg_table *sgt)
 {
 	int ret = 0, i;
@@ -1329,8 +1330,9 @@ exit_free_vmid_list:
 exit:
 	return ret;
 }
+EXPORT_SYMBOL(qseecom_create_bridge_for_secbuf);
 
-static int qseecom_dmabuf_map(int ion_fd, struct sg_table **sgt,
+int qseecom_dmabuf_map(int ion_fd, struct sg_table **sgt,
 				struct dma_buf_attachment **attach,
 				struct dma_buf **dmabuf)
 {
@@ -1380,8 +1382,9 @@ err_put:
 err:
 	return ret;
 }
+EXPORT_SYMBOL(qseecom_dmabuf_map);
 
-static void qseecom_dmabuf_unmap(struct sg_table *sgt,
+void qseecom_dmabuf_unmap(struct sg_table *sgt,
 			struct dma_buf_attachment *attach,
 			struct dma_buf *dmabuf)
 {
@@ -1389,6 +1392,7 @@ static void qseecom_dmabuf_unmap(struct sg_table *sgt,
 	dma_buf_detach(dmabuf, attach);
 	dma_buf_put(dmabuf);
 }
+EXPORT_SYMBOL(qseecom_dmabuf_unmap);
 
 /* convert ion_fd to phys_adds and virt_addr*/
 static int qseecom_vaddr_map(int ion_fd,

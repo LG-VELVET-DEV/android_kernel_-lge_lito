@@ -173,6 +173,20 @@ static const struct virtual_sensor_data qti_virtual_sensors[] = {
 		.coefficients = {30, 70},
 		.avg_denominator = 100,
 	},
+#ifdef CONFIG_MACH_LITO_CAYMANLM_LAO_COM
+	/* vts = -0.164*xo_therm + 0.971*quiet_therm + 5.74 */
+	{
+		.virt_zone_name = "vts-virt-therm",
+		.num_sensors = 2,
+		.sensor_names = {"xo-therm-usr",
+				"quiet-therm-usr"},
+		.coefficient_ct = 2,
+		.coefficients = {-164, 971},
+		.avg_offset = 5740000,
+		.avg_denominator = 1000,
+		.logic = VIRT_WEIGHTED_AVG,
+	},
+#endif
 };
 
 int qti_virtual_sensor_register(struct device *dev)

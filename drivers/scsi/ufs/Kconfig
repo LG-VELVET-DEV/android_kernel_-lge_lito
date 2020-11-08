@@ -143,3 +143,5 @@ config SCSI_UFS_HISI
 
 	  Select this if you have UFS controller on Hisilicon chipset.
 	  If unsure, say N.
+
+source "drivers/scsi/ufs/Kconfig.lfs"

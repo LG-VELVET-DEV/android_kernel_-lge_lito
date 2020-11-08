@@ -267,6 +267,15 @@ done:
 	 * we must wait at least 50ms before accessing the PHY domain
 	 * (synchronization delay). DWC_usb31 programming guide section 1.3.2.
 	 */
+#ifdef CONFIG_LGE_USB
+	/*
+	 * Do not delay in usb compliance mode. Otherwise, it may fail at "TD
+	 * 4.7.5 Try. SNK DRP Connect Sink Test" of "USB-C Functional Tests".
+	 */
+	if (!(dwc->usb_compliance_mode &&
+	      *dwc->usb_compliance_mode &&
+	      (dwc->usb2_phy->flags & PHY_HOST_MODE)))
+#endif
 	if (dwc3_is_usb31(dwc))
 		msleep(50);
 
@@ -1070,19 +1079,6 @@ int dwc3_core_init(struct dwc3 *dwc)
 		dwc3_writel(dwc->regs, DWC3_GUCTL3, reg);
 	}
 
-	if (dwc->gen2_tx_de_emph != -1)
-		dwc3_writel(dwc->regs, DWC31_LCSR_TX_DEEMPH(0),
-			dwc->gen2_tx_de_emph & DWC31_TX_DEEMPH_MASK);
-	if (dwc->gen2_tx_de_emph1 != -1)
-		dwc3_writel(dwc->regs, DWC31_LCSR_TX_DEEMPH_1(0),
-			dwc->gen2_tx_de_emph1 & DWC31_TX_DEEMPH_MASK);
-	if (dwc->gen2_tx_de_emph2 != -1)
-		dwc3_writel(dwc->regs, DWC31_LCSR_TX_DEEMPH_2(0),
-			dwc->gen2_tx_de_emph2 & DWC31_TX_DEEMPH_MASK);
-	if (dwc->gen2_tx_de_emph3 != -1)
-		dwc3_writel(dwc->regs, DWC31_LCSR_TX_DEEMPH_3(0),
-			dwc->gen2_tx_de_emph3 & DWC31_TX_DEEMPH_MASK);
-
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_POST_RESET_EVENT, 0);
 
 	/* set inter-packet gap 199.794ns to improve EL_23 margin */
@@ -1335,22 +1331,6 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 
 	dwc->dis_metastability_quirk = device_property_read_bool(dev,
 				"snps,dis_metastability_quirk");
-
-	dwc->gen2_tx_de_emph = -1;
-	device_property_read_u32(dev, "snps,gen2-tx-de-emph",
-			&dwc->gen2_tx_de_emph);
-
-	dwc->gen2_tx_de_emph1 = -1;
-	device_property_read_u32(dev, "snps,gen2-tx-de-emph1",
-			&dwc->gen2_tx_de_emph1);
-
-	dwc->gen2_tx_de_emph2 = -1;
-	device_property_read_u32(dev, "snps,gen2-tx-de-emph2",
-			&dwc->gen2_tx_de_emph2);
-
-	dwc->gen2_tx_de_emph3 = -1;
-	device_property_read_u32(dev, "snps,gen2-tx-de-emph3",
-			&dwc->gen2_tx_de_emph3);
 
 	dwc->lpm_nyet_threshold = lpm_nyet_threshold;
 	dwc->tx_de_emphasis = tx_de_emphasis;

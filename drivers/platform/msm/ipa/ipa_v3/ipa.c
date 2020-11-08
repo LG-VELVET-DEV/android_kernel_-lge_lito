@@ -6559,11 +6559,6 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		ipa3_ctx->gsi_fw_file_name =
 			kzalloc(((strlen(resource_p->gsi_fw_file_name)+1) *
 				sizeof(const char)), GFP_KERNEL);
-		if (ipa3_ctx->gsi_fw_file_name == NULL) {
-			IPAERR_RL("Failed to alloc GSI FW file name\n");
-			result = -ENOMEM;
-			goto fail_gsi_file_alloc;
-		}
 		memcpy(ipa3_ctx->gsi_fw_file_name,
 				(void const *)resource_p->gsi_fw_file_name,
 				strlen(resource_p->gsi_fw_file_name));
@@ -6573,11 +6568,6 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		ipa3_ctx->uc_fw_file_name =
 			kzalloc(((strlen(resource_p->uc_fw_file_name)+1) *
 				sizeof(const char)), GFP_KERNEL);
-		if (ipa3_ctx->uc_fw_file_name == NULL) {
-			IPAERR_RL("Failed to alloc uC FW file name\n");
-			result = -ENOMEM;
-			goto fail_uc_file_alloc;
-		}
 		memcpy(ipa3_ctx->uc_fw_file_name,
 			(void const *)resource_p->uc_fw_file_name,
 			strlen(resource_p->uc_fw_file_name));
@@ -7067,9 +7057,6 @@ fail_mem_ctrl:
 fail_tz_unlock_reg:
 	if (ipa3_ctx->logbuf)
 		ipc_log_context_destroy(ipa3_ctx->logbuf);
-fail_uc_file_alloc:
-	kfree(ipa3_ctx->gsi_fw_file_name);
-fail_gsi_file_alloc:
 	kfree(ipa3_ctx);
 	ipa3_ctx = NULL;
 fail_mem_ctx:
@@ -7358,15 +7345,15 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	result = of_property_read_string(pdev->dev.of_node,
 			"qcom,use-gsi-ipa-fw", &ipa_drv_res->gsi_fw_file_name);
 	if (!result)
-		IPADBG("GSI IPA FW name %s\n", ipa_drv_res->gsi_fw_file_name);
+		IPADBG("GSI IPA FW using %s\n", ipa_drv_res->gsi_fw_file_name);
 	else
-		IPADBG("GSI IPA FW file not defined. Using default one\n");
+		IPADBG("GSI IPA FW file not defined using default one\n");
 	result = of_property_read_string(pdev->dev.of_node,
 			"qcom,use-uc-ipa-fw", &ipa_drv_res->uc_fw_file_name);
 	if (!result)
-		IPADBG("uC IPA FW name = %s\n", ipa_drv_res->uc_fw_file_name);
+		IPADBG("uC IPA FW using = %s\n", ipa_drv_res->uc_fw_file_name);
 	else
-		IPADBG("uC IPA FW file not defined. Using default one\n");
+		IPADBG("uC IPA FW file not defined using default one\n");
 	/* Get IPA wrapper address */
 	resource = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 			"ipa-base");

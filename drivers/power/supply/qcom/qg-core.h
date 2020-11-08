@@ -121,6 +121,9 @@ struct qpnp_qg {
 	struct power_supply	*usb_psy;
 	struct power_supply	*dc_psy;
 	struct power_supply	*parallel_psy;
+#ifdef CONFIG_CHARGER_IDTP9222
+	struct power_supply	*wireless_psy;
+#endif
 	struct qg_esr_data	esr_data[QG_MAX_ESR_COUNT];
 
 	/* status variable */
@@ -186,6 +189,7 @@ struct qpnp_qg {
 	int			last_adj_ssoc;
 	int			recharge_soc;
 	int			batt_age_level;
+	int			ibat;
 	struct alarm		alarm_timer;
 	u32			sdam_data[SDAM_MAX];
 
@@ -253,6 +257,9 @@ enum qg_wa_flags {
 	QG_CLK_ADJUST_WA = BIT(2),
 	QG_PON_OCV_WA = BIT(3),
 };
-
-
+#ifdef CONFIG_LGE_PM
+int extension_qg_load_dt(void);
+int extension_qg_load_icoeff_dt(struct qpnp_qg *qg);
+int lge_get_ui_soc(struct qpnp_qg *qg, int msoc_raw);
+#endif
 #endif /* __QG_CORE_H__ */
