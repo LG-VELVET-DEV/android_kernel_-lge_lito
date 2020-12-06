@@ -56,6 +56,9 @@ module_param(use_primary_usb, bool, 0644);
 static bool usb_sudden_disconnect_check;
 module_param(usb_sudden_disconnect_check, bool, 0644);
 
+static bool ds_recovery_store_check;
+module_param(ds_recovery_store_check, bool, 0644);
+
 static bool usb_2nd_host_test;
 module_param(usb_2nd_host_test, bool, 0644);
 
@@ -1111,6 +1114,8 @@ static ssize_t ds2_recovery_store(struct device *dev,
 
 	if (!recovery)
 		return size;
+
+	BUG_ON(ds_recovery_store_check);
 
 	ds3->is_ds_recovery = ds_power_recovery_count;
 	ds_set_state(ds3, STATE_DS_RECOVERY_POWER_OFF);

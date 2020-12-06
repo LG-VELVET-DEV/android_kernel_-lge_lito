@@ -371,6 +371,11 @@ enum {
 	APP_MENU,
 };
 
+enum {
+	FIRST_RESUME_NOT_YET = 0,
+	FIRST_RESUME_IS_OK,
+};
+
 #if defined(CONFIG_LGE_TOUCH_APP_FW_UPGRADE)
 enum {
 	APP_FW_UPGRADE_IDLE = 0,
@@ -402,6 +407,7 @@ struct state_info {
 	atomic_t film_mode; /* protection film in manufcturing */
 	atomic_t dualscreen;
 	atomic_t dex_mode;
+	atomic_t first_resume;
 };
 
 struct touch_driver {
@@ -762,6 +768,7 @@ extern void touch_interrupt_control(struct device *dev, int on_off);
 extern void touch_report_all_event(struct touch_core_data *ts);
 extern void touch_send_uevent(struct touch_core_data *ts, int type);
 extern void touch_report_cancel_event(struct touch_core_data *ts);
+extern void touch_restore_state(struct touch_core_data *ts);
 #if defined(CONFIG_SECURE_TOUCH)
 extern void secure_touch_notify(struct touch_core_data *ts);
 extern void secure_touch_init(struct touch_core_data *ts);

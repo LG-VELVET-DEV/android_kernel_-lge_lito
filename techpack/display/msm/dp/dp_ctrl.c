@@ -54,6 +54,7 @@ extern bool is_ds_connected(void);
 
 #ifdef CONFIG_LGE_DISPLAY_COMMON
 bool dp_lt1_state;
+int dp_ctrl_status;
 #endif
 
 
@@ -750,12 +751,17 @@ static int dp_ctrl_link_setup(struct dp_ctrl_private *ctrl, bool shallow)
 		dp_ctrl_select_training_pattern(ctrl, downgrade);
 
 		rc = dp_ctrl_setup_main_link(ctrl);
-		if (!rc)
 #if defined(CONFIG_LGE_DUAL_SCREEN)
-			if (is_ds_connected())
+		if (!rc) {
+			if (is_ds_connected()) {
 				hallic_set_state(&dd_lt_dev, 1);
-#endif
+			}
 			break;
+		}
+#else
+		if (!rc)
+			break;
+#endif
 
 		/*
 		 * Shallow means link training failure is not important.
@@ -1387,13 +1393,14 @@ static void dp_ctrl_off(struct dp_ctrl *dp_ctrl)
 
 #if defined(CONFIG_LGE_DUAL_SCREEN)
 	dd_lt_dev.state = 0;
+	dp_ctrl_status = 0;
 #endif
 	ctrl->mst_mode = false;
 	ctrl->fec_mode = false;
 	ctrl->dsc_mode = false;
 	ctrl->power_on = false;
 	memset(&ctrl->mst_ch_info, 0, sizeof(ctrl->mst_ch_info));
-	DP_DEBUG("DP off done\n");
+	DP_INFO("DP off done\n");
 }
 
 static void dp_ctrl_set_mst_channel_info(struct dp_ctrl *dp_ctrl,

@@ -18,6 +18,7 @@
 #include <linux/dma-buf.h>
 #include <linux/kref.h>
 #include <linux/signal.h>
+#include <linux/sched.h>
 
 #include <soc/qcom/scm.h>
 #include <asm/cacheflush.h>
@@ -961,12 +962,10 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	 * we need not worry that server_info will be deleted because as long
 	 * as this CBObj is served by this server, srvr_info will be valid.
 	 */
-	if (wq_has_sleeper(&srvr_info->req_wait_q)) {
-		wake_up_interruptible_all(&srvr_info->req_wait_q);
-		ret = wait_event_interruptible(srvr_info->rsp_wait_q,
-			(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
-			(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT));
-	}
+	wake_up_interruptible_all(&srvr_info->req_wait_q);
+	ret = wait_event_interruptible(srvr_info->rsp_wait_q,
+		(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
+		(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT));
 out:
 	/*
 	 * we could be here because of either: a. Req is PROCESSED
@@ -984,7 +983,6 @@ out:
 		srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT) {
 		cb_req->result = OBJECT_ERROR_DEFUNCT;
 	} else {
-		pr_debug("%s wait_event interrupted ret = %d\n", __func__, ret);
 		cb_req->result = OBJECT_ERROR_ABORT;
 	}
 	--cb_reqs_inflight;
@@ -1577,8 +1575,6 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 		ret = wait_event_interruptible(server_info->req_wait_q,
 				!hash_empty(server_info->reqs_table));
 		if (ret) {
-			pr_debug("%s wait_event interrupted: ret = %d\n",
-							__func__, ret);
 			/*
 			 * Ideally, we should destroy server if accept threads
 			 * are returning due to client being killed or device
@@ -1620,6 +1616,7 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 out:
 	if (server_info)
 		kref_put(&server_info->ref_cnt, destroy_cb_server);
+
 	return ret;
 }
 
@@ -1911,7 +1908,6 @@ static int __maybe_unused smcinvoke_suspend(struct platform_device *pdev,
 					pm_message_t state)
 {
 	if (cb_reqs_inflight) {
-		pr_err("Failed to suspend smcinvoke driver\n");
 		return -EIO;
 	}
 

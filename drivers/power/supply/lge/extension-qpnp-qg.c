@@ -746,7 +746,11 @@ extension_bms_get_property_pre(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_UPDATE_NOW :
 		/* Do nothing and just consume getting */
-		val->intval = -1;
+		if (qg != NULL) {
+			val->intval = qg->in_esr_process;
+		} else {
+			val->intval = -1;
+		}
 		break;
 
 	default:

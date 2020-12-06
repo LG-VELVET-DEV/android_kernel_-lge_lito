@@ -1983,6 +1983,8 @@ static void wa_faster_try_cp_qc30_trigger(struct smb_charger *chg)
 	if (ext_chg->wa_target_cnt > chg->pulse_cnt) {
 		val.intval = POWER_SUPPLY_DP_DM_DP_PULSE;
 
+		msleep(100);
+
 		rc = power_supply_set_property(
 			chg->batt_psy, POWER_SUPPLY_PROP_DP_DM, &val);
 	} else {
@@ -2234,7 +2236,7 @@ static void wa_comp_pwr_cp_qc30_work_func(struct work_struct *work)
 	struct smb_charger *chg = ext_chg->chg;
 	union power_supply_propval val = {0, };
 	int cp_enable = 0, cp_status1 = 0, cp_status2 = 0;
-	int soc = 0, icp_ma = 0, vusb = 0, vbat = 0, fcc = 0, ibat = 0, iavg = 0;
+	int soc = 0, icp_ma = 0, vusb = 0, vbat = 0, fcc = 0, ibat = 0, iavg = 0, in_esr_process = 0;
 	int pulse_count = 0, rc = 0;
 	int cp_ilim = 0, cp_ilim_comp = 0;
 	int delay_ms = WA_COMP_CP_QC30_ILIM_DELAY;
@@ -2267,6 +2269,8 @@ static void wa_comp_pwr_cp_qc30_work_func(struct work_struct *work)
 		POWER_SUPPLY_PROP_CURRENT_NOW, &val) ? val.intval/1000 : -1;
 	iavg = !power_supply_get_property(chg->bms_psy,
 		POWER_SUPPLY_PROP_CURRENT_AVG, &val) ? (val.intval *-1)/1000 : -1;
+	in_esr_process = !power_supply_get_property(chg->bms_psy,
+		POWER_SUPPLY_PROP_UPDATE_NOW, &val) ? (val.intval) : -1;
 	vusb = !power_supply_get_property(chg->usb_psy,
 		POWER_SUPPLY_PROP_VOLTAGE_NOW, &val) ? val.intval/1000 : -1;
 	vbat = !power_supply_get_property(chg->bms_psy,
@@ -2377,14 +2381,13 @@ static void wa_comp_pwr_cp_qc30_work_func(struct work_struct *work)
 
 		cp_ilim_comp = (fcc - ibat) / 2 / CP_ILIM_STEP_MA * CP_ILIM_STEP_UA;
 
-		if (cp_ilim_comp > CP_ILIM_STEP_UA && iavg > 0) {
-			cp_ilim_comp = (fcc - iavg) / 2 / CP_ILIM_STEP_MA * CP_ILIM_STEP_UA;
-			if (cp_ilim_comp > CP_ILIM_STEP_UA) {
-				cp_ilim_comp = CP_ILIM_STEP_UA;
-			} else {
+		if (cp_ilim_comp >= CP_ILIM_STEP_UA) {
+			if (in_esr_process) {
 				cp_ilim_comp = 0;
-				pr_info("CP ILIM hold -> cp_ilim=%d, fcc=%d, ibat=%d, iavg=%d\n",
-						cp_ilim / 1000, fcc, ibat, iavg);
+				pr_info("CP ILIM hold -> cp_ilim=%d, fcc=%d, ibat=%d, iavg=%d, in_esr=%d\n",
+						cp_ilim / 1000, fcc, ibat, iavg, in_esr_process);
+			} else {
+				cp_ilim_comp = CP_ILIM_STEP_UA;
 			}
 		} else if (cp_ilim_comp < -CP_ILIM_STEP_UA)
 			cp_ilim_comp = -CP_ILIM_STEP_UA;
@@ -2397,10 +2400,10 @@ static void wa_comp_pwr_cp_qc30_work_func(struct work_struct *work)
 				POWER_SUPPLY_PROP_INPUT_CURRENT_MAX, &val);
 
 			pr_info("CP ILIM %s -> new cp_ilim=%d, pulse=%d, status=0x%X,%X, "
-					"vbus=%d, vbat=%d, icp=%d, fcc=%d, ibat=%d, iavg=%d, cp_ilim=%d\n",
+					"vbus=%d, vbat=%d, icp=%d, fcc=%d, ibat=%d, iavg=%d, cp_ilim=%d, in_esr=%d\n",
 					cp_ilim_comp > 0 ? "up" : "down",
 					val.intval / 1000, pulse_count, cp_status1, cp_status2,
-					vusb, vbat, icp_ma,	fcc, ibat, iavg, cp_ilim / 1000);
+					vusb, vbat, icp_ma,	fcc, ibat, iavg, cp_ilim / 1000, in_esr_process);
 
 			goto comp_cp_qc30_reschedule;
 		}

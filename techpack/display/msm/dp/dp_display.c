@@ -1336,10 +1336,16 @@ static int dp_display_handle_disconnect(struct dp_display_private *dp)
 	}
 
 	mutex_lock(&dp->session_lock);
-	if (rc && dp_display_state_is(DP_STATE_ENABLED))
+	if (dp_display_state_is(DP_STATE_ENABLED))
 		dp_display_clean(dp);
 
 	dp_display_host_unready(dp);
+#if defined(CONFIG_LGE_DUAL_SCREEN)
+	if (is_ds_connected() && !dp_display_state_is(DP_STATE_SRC_PWRDN)) {
+		dp_display_host_deinit(dp);
+		dp_display_state_add(DP_STATE_SRC_PWRDN);
+	}
+#endif
 
 	mutex_unlock(&dp->session_lock);
 

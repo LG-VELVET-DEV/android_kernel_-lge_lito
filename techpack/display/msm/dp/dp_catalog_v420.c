@@ -317,7 +317,7 @@ static void dp_catalog_ctrl_update_vx_px_v420(struct dp_catalog_ctrl *ctrl,
 	}
 #if IS_ENABLED(CONFIG_LGE_DUAL_SCREEN)
 	if (is_ds_connected()) {
-		value0 = 0x0E; // 515.1 mV
+		value0 = 0x10; // 557.5 mV
 		value1 = 0x11; // post emp : -4.4 dB
 		value2 = 0x00; // 0.0 db
 	}
@@ -347,7 +347,8 @@ static void dp_catalog_ctrl_update_vx_px_v420(struct dp_catalog_ctrl *ctrl,
 	value0 |= BIT(5);
 	value1 |= BIT(5);
 #if IS_ENABLED(CONFIG_LGE_DUAL_SCREEN)
-	value2 |= BIT(5);
+	if (is_ds_connected())
+		value2 |= BIT(5);
 #endif
 
 	/* Configure host and panel only if both values are allowed */

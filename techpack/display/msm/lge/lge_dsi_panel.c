@@ -118,6 +118,10 @@ static int lge_dsi_panel_mode_set(struct dsi_panel *panel)
 		pr_err("invalid params\n");
 		return -EINVAL;
 	}
+
+	if (panel->lge.ecc_status && panel->lge.ddic_ops && panel->lge.ddic_ops->lge_set_ecc_status)
+		panel->lge.ddic_ops->lge_set_ecc_status(panel, panel->lge.ecc_status);
+
 	reg_backup_cond = !(panel->lge.use_ddic_reg_backup^panel->lge.ddic_reg_backup_complete);
 
 	pr_info("backup=%d\n", reg_backup_cond);
@@ -134,7 +138,7 @@ static int lge_dsi_panel_mode_set(struct dsi_panel *panel)
 		pr_warn("skip ddic mode set on booting or not supported!\n");
 	}
 
-	if(panel->lge.use_tc_perf) {
+	if (panel->lge.use_tc_perf) {
 		tc_perf_status = panel->lge.tc_perf;
 		if (tc_perf_status && panel->lge.ddic_ops &&
 				panel->lge.ddic_ops->lge_set_tc_perf) {

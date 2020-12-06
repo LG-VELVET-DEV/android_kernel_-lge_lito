@@ -78,6 +78,10 @@ enum lge_ddic_dsi_cmd_set_type {
 	LGE_DDIC_DSI_FP_LHBM_OFF,
 	LGE_DDIC_DSI_FP_LHBM_AOD_TO_FPS,
 	LGE_DDIC_DSI_FP_LHBM_FPS_TO_AOD,
+	LGE_DDIC_DSI_ECC_STATUS_ON,
+	LGE_DDIC_DSI_ECC_STATUS_OFF,
+	LGE_DDIC_DSI_DAYLIGHT_ON,
+	LGE_DDIC_DSI_DAYLIGHT_OFF,
 	LGE_DDIC_DSI_CMD_SET_MAX
 };
 
@@ -159,9 +163,11 @@ struct lge_ddic_ops {
 	void (*lge_set_hdr_mode)(struct dsi_panel *panel, int input);
 	void (*lge_set_acl_mode)(struct dsi_panel *panel, int input);
 	void (*lge_set_video_enhancement)(struct dsi_panel *panel, int input);
+	void (*lge_set_ecc_status)(struct dsi_panel *panel, int input);
 	void (*lge_vr_lp_mode_set)(struct dsi_panel *panel, int input);
 	void (*sharpness_set)(struct dsi_panel *panel, int mode);
 	void (*lge_set_true_view_mode)(struct dsi_panel *panel, bool send_cmd);
+	int (*daylight_mode_set)(struct dsi_panel *panel, int input);
 	int (*hdr_mode_set)(struct dsi_panel *panel, int input);
 	int (*get_irc_state)(struct dsi_panel *panel);
 	int (*set_irc_state)(struct dsi_panel *panel, enum lge_irc_mode mode, enum lge_irc_ctrl enable);
@@ -235,6 +241,7 @@ struct lge_dsi_panel {
 	bool use_ddic_reg_backup;
 	bool ddic_reg_backup_complete;
 	bool is_sent_bc_dim_set;
+	int daylight_mode;
 	int hdr_mode;
 	int mfts_auto_touch;
 
@@ -271,6 +278,7 @@ struct lge_dsi_panel {
 	struct dsi_panel_cmd_set dg_preset_cmds;
 	int sharpness;
 	int video_enhancement;
+	int ecc_status;
 	int hdr_hbm_lut;
 	int ddic_hdr;
 	int ve_hdr;

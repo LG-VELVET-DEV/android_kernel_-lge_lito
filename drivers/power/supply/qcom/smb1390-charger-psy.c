@@ -1457,18 +1457,30 @@ static int smb1390_get_prop_charging_enabled(struct smb1390 *chip)
 	extern bool unified_nodes_show(const char* key, char* value);
 	union power_supply_propval capa = {0, };
 	char buff [16] = { 0, };
-	int test, status, status2, ret = false;
+	int test, status, status2, ret = false, vbat = 0, vusb = 0;
 	static bool pass = false;
+	struct power_supply* psy_usb = power_supply_get_by_name("usb");
+	struct power_supply* psy_bms = power_supply_get_by_name("bms");
+	union power_supply_propval val = { 0, };
 
+	vbat = (psy_bms && !power_supply_get_property(
+					psy_bms, POWER_SUPPLY_PROP_VOLTAGE_NOW, &val))
+					? val.intval/1000 : 0;
+	vusb = (psy_usb && !power_supply_get_property(
+					psy_usb, POWER_SUPPLY_PROP_VOLTAGE_NOW, &val))
+					? val.intval/1000 : 0;
 	if (!smb1390_read(chip, CORE_STATUS1_REG, &status)
 			&& !smb1390_read(chip, CORE_STATUS2_REG, &status2)) {
 		if (((status == 0x4) || (status == 0xC))&& (status2 == 0x80)) {
+			smb1390_dbg(chip, PR_LGE, "success vbat=%d, vusb=%d\n", vbat, vusb);
 			ret = true;
 			pass = true;
 		} else if (is_psy_voter_available(chip) && !power_supply_get_property(
 				chip->batt_psy, POWER_SUPPLY_PROP_CAPACITY, &capa)
 				&& capa.intval >= 70) {
 			ret = true;
+		} else {
+			smb1390_dbg(chip, PR_LGE, "waiting... vbat=%d, vusb=%d\n", vbat, vusb);
 		}
 	}
 

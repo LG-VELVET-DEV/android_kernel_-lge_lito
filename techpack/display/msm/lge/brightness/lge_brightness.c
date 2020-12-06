@@ -30,7 +30,9 @@ char *blmap_names[] = {
 	"lge,blmap-ex",
 	"lge,dynamic-blmap-brighter",
 	"lge,blmap-hdr",
-	"lge,blmap-vr"
+	"lge,blmap-vr",
+	"lge,blmap-daylight",
+	"lge,blmap-hdr-daylight"
 };
 
 static const int blmap_names_num = sizeof(blmap_names)/sizeof(blmap_names[0]);
@@ -241,10 +243,14 @@ int lge_backlight_device_update_status(struct backlight_device *bd)
 		bl_type = LGE_BLMAP_VR;
 	} else if (panel->lge.hdr_mode) {
 		bl_type = LGE_BLMAP_HDR;
+		if (panel->lge.daylight_mode)
+			bl_type = LGE_BLMAP_HDR_DAYLIGHT;
 	} else if (panel->lge.use_color_manager && panel->lge.video_enhancement) {
 		bl_type = LGE_BLMAP_VE;
 	} else if (panel->lge.use_dynamic_brightness && panel->lge.brightness_table) {
 		bl_type = LGE_BLMAP_BRIGHTER;
+	} else if (panel->lge.daylight_mode){
+		bl_type = LGE_BLMAP_DAYLIGHT;
 	} else {
 		bl_type = LGE_BLMAP_DEFAULT;
 	}

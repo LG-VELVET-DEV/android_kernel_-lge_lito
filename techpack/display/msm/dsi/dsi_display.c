@@ -67,6 +67,7 @@ static const struct of_device_id dsi_display_dt_match[] = {
 };
 
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_COMMON)
+static int lge_cmdline_disable_ecc = 0;
 struct dsi_display *primary_display;
 struct dsi_display *secondary_display;
 
@@ -846,16 +847,20 @@ static int dsi_display_status_check_te(struct dsi_display *display)
 			}
 			lge_panel_notifier_call_chain(LGE_PANEL_EVENT_RECOVERY, 0, LGE_PANEL_RECOVERY_DEAD);
 
+#if IS_ENABLED(TBD_ESD_RECOVERY)
 			cont_recovery_cnt++;
+#endif
 		} else {
 			pr_info("Already in recovery state\n");
 			goto out;
 		}
 
+#if IS_ENABLED(TBD_ESD_RECOVERY)
 		if (cont_recovery_cnt >= LIMIT_OF_CONT_RECOVERY)
 			panic("ESD check failed over %d times continuously\n", cont_recovery_cnt);
 
 		pr_info("cont_recovery_cnt = %d\n", cont_recovery_cnt);
+#endif
 #endif
 		DSI_ERR("TE check failed\n");
 		rc = -EINVAL;
@@ -7105,6 +7110,8 @@ int dsi_display_prepare(struct dsi_display *display)
 			}
 		}
 	}
+
+	display->panel->lge.ecc_status = !lge_cmdline_disable_ecc;
 #endif
 
 	dsi_display_set_ctrl_esd_check_flag(display, false);
@@ -7451,6 +7458,23 @@ wait_failure:
 }
 
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_COMMON)
+static int __init lge_display_check_disable_ecc(char *status)
+{
+	if (!strcmp(status, "0")) {
+		lge_cmdline_disable_ecc = 0;
+		pr_info("[Display] ecc ON\n");
+	} else {
+		lge_cmdline_disable_ecc = 1;
+		pr_info("[Display] ecc OFF\n");
+	}
+
+	pr_info("[Display] lge_cmdline_disable_ecc=%d cmdline=%s\n",
+				lge_cmdline_disable_ecc, status);
+
+	return 1;
+}
+__setup("disable_ecc.status=", lge_display_check_disable_ecc);
+
 int dsi_display_post_kickoff(struct dsi_display *display)
 {
 	int rc = 0;
@@ -7631,8 +7655,11 @@ int dsi_display_enable(struct dsi_display *display)
 				}
 			}
 		}
+
+		if (display->panel->lge.ecc_status && display->panel->lge.ddic_ops->lge_set_ecc_status)
+			display->panel->lge.ddic_ops->lge_set_ecc_status(display->panel, display->panel->lge.ecc_status);
 #endif
-		DSI_DEBUG("cont splash enabled, display enable not required\n");
+		DSI_INFO("cont splash enabled, display enable not required\n");
 		return 0;
 	}
 

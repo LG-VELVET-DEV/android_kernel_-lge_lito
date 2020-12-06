@@ -162,7 +162,8 @@ module_param(spi_data_corruption_test, uint, 0644);
 #define SLS_XFER_DESC0_BABBLE(dw0)	(((dw0) >> 4) & 1)
 #define SLS_XFER_DESC0_TRA(dw0)		(((dw0) >> 3) & 1)
 #define SLS_XFER_DESC0_ERROR(dw0)	(SLS_XFER_DESC0_HALT(dw0) || \
-					 SLS_XFER_DESC0_BABBLE(dw0))
+					 SLS_XFER_DESC0_BABBLE(dw0) || \
+					 SLS_XFER_DESC0_TRA(dw0))
 
 #define SLS_XFER_DESC1(urb) \
 	(((usb_pipecontrol(urb->pipe) ? 0 : \
@@ -1176,17 +1177,21 @@ static void sls_purge_data(struct usb_hcd *hcd, struct urb *urb)
 static int sls_check_unlink(struct usb_hcd *hcd)
 {
 	struct sls_hcd *sls_hcd = hcd_to_sls(hcd);
-	struct sls_ep *sls_ep;
+	struct sls_ep *sls_ep, *sls_ep_n;
 	struct usb_host_endpoint *ep;
-	struct urb *urb, *next;
+	struct urb *urb, *urb_n;
 	unsigned long flags;
 	int ret;
 
 	spin_lock_irqsave(&sls_hcd->lock, flags);
 
-	list_for_each_entry(sls_ep, &sls_hcd->ep_list, ep_list) {
+	list_for_each_entry_safe(sls_ep, sls_ep_n, &sls_hcd->ep_list, ep_list) {
 		ep = sls_ep->ep;
-		list_for_each_entry_safe(urb, next, &ep->urb_list, urb_list) {
+		list_for_each_entry_safe(urb, urb_n, &ep->urb_list, urb_list) {
+			if (!(sls_hcd->port_status & USB_PORT_STAT_ENABLE) &&
+			    !urb->unlinked)
+				urb->unlinked = -ESHUTDOWN;
+
 			if (urb->unlinked) {
 				ret = 1;
 				dev_dbg(sls_hcd->dev, "%s: URB %p ep%d%s unlinked=%d\n",
@@ -1195,6 +1200,8 @@ static int sls_check_unlink(struct usb_hcd *hcd)
 					usb_pipeendpoint(urb->pipe),
 					usb_urb_dir_in(urb) ? "in" : "out",
 					urb->unlinked);
+				if (urb == sls_hcd->temp_urb)
+					sls_hcd->temp_urb = NULL;
 				if (urb == sls_hcd->curr_urb) {
 					sls_hcd->urb_done = 0;
 					sls_hcd->curr_urb = NULL;
@@ -1206,6 +1213,7 @@ static int sls_check_unlink(struct usb_hcd *hcd)
 				usb_hcd_unlink_urb_from_ep(hcd, urb);
 				spin_unlock_irqrestore(&sls_hcd->lock, flags);
 				sls_purge_data(hcd, urb);
+				urb->status = -EINPROGRESS;
 				usb_hcd_giveback_urb(hcd, urb, 0);
 				spin_lock_irqsave(&sls_hcd->lock, flags);
 			}
@@ -1365,6 +1373,10 @@ static void sls_handle_error(struct usb_hcd *hcd, u32 dw0)
 		sls_hcd->urb_done = -EPIPE;
 	else if (SLS_XFER_DESC0_BABBLE(dw0))
 		sls_hcd->urb_done = -EOVERFLOW;
+	else if (SLS_XFER_DESC0_TRA(dw0))
+		sls_hcd->urb_done = -EPROTO;
+	else
+		sls_hcd->urb_done = -EINVAL;
 }
 
 static int sls_transfer_in_done(struct usb_hcd *hcd, struct urb *urb)
@@ -1460,6 +1472,7 @@ static void sls_host_transfer_done(struct usb_hcd *hcd)
 	if (unlikely(SLS_XFER_DESC0_ERROR(desc[0]))) {
 		sls_handle_error(hcd, desc[0]);
 		usb_settoggle(urb->dev, epnum, epout, 0);
+		sls_urb_done(hcd);
 		return;
 	}
 
@@ -1547,6 +1560,9 @@ static void sls_detect_conn(struct usb_hcd *hcd)
 		dev_dbg(sls_hcd->dev, "%s: ENABLE\n", __func__);
 		sls_hcd->port_status |=  USB_PORT_STAT_ENABLE;
 	} else {
+		if (sls_hcd->port_status & USB_PORT_STAT_ENABLE)
+			set_bit(CHECK_UNLINK, &sls_hcd->todo);
+
 		sls_hcd->port_status &= ~USB_PORT_STAT_ENABLE;
 	}
 
@@ -1762,6 +1778,7 @@ static int sls_urb_done(struct usb_hcd *hcd)
 		usb_hcd_unlink_urb_from_ep(hcd, urb);
 		spin_unlock_irqrestore(&sls_hcd->lock, flags);
 		/* must be called without the HCD spinlock */
+		urb->status = -EINPROGRESS;
 		usb_hcd_giveback_urb(hcd, urb, status);
 	}
 
@@ -1954,6 +1971,12 @@ static int sls_urb_enqueue(struct usb_hcd *hcd,
 	struct sls_ep *sls_ep;
 	unsigned long flags;
 	int ret;
+
+	if (!(sls_hcd->port_status & USB_PORT_STAT_ENABLE)) {
+		dev_dbg(sls_hcd->dev, "%s: Can't queue urb, port error, link inactive\n",
+			__func__);
+		return -ENODEV;
+	}
 
 	dev_dbg(sls_hcd->dev, "%s: URB %p ep%d%s-%s %d\n", __func__,
 		urb,

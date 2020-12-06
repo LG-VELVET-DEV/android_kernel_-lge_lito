@@ -353,6 +353,7 @@ static void touch_init_work_func(struct work_struct *init_work)
 	mutex_unlock(&ts->lock);
 
 	if (atomic_read(&ts->state.core) == CORE_PROBE) {
+		touch_restore_state(ts);
 		queue_delayed_work(ts->wq, &ts->upgrade_work, 0);
 		return;
 	}
@@ -651,6 +652,13 @@ static void touch_resume(struct device *dev)
 	TOUCH_TRACE();
 
 	TOUCH_I("%s Start\n", __func__);
+
+	if (atomic_read(&ts->state.first_resume) == FIRST_RESUME_NOT_YET) {
+		atomic_set(&ts->state.uevent, UEVENT_IDLE);
+		atomic_set(&ts->state.first_resume, FIRST_RESUME_IS_OK);
+		TOUCH_I("%s first resume! clear uevent state.\n", __func__);
+	}
+
 #if defined(CONFIG_SECURE_TOUCH)
 	if (atomic_read(&ts->st_enabled))
 		secure_touch_stop(ts, true);
@@ -777,6 +785,8 @@ static int touch_init_uevent(struct touch_core_data *ts)
 
 	TOUCH_TRACE();
 
+	atomic_set(&ts->state.first_resume, FIRST_RESUME_NOT_YET);
+
 	ret = subsys_system_register(&touch_uevent_subsys, NULL);
 	if (ret < 0)
 		TOUCH_E("%s, bus is not registered, ret : %d\n",
@@ -850,28 +860,62 @@ void touch_send_uevent(struct touch_core_data *ts, int type)
 	}
 }
 
+static int connection;
+static int wireless;
+static int earjack;
+static int fm_radio;
+
 void touch_notify_connect(u32 type)
 {
+	connection = type;
 	touch_atomic_notifier_call(NOTIFY_CONNECTION, &type);
 }
 EXPORT_SYMBOL(touch_notify_connect);
 
 void touch_notify_wireless(u32 type)
 {
+	wireless = type;
 	touch_atomic_notifier_call(NOTIFY_WIRELESS, &type);
 }
 EXPORT_SYMBOL(touch_notify_wireless);
 
 void touch_notify_earjack(u32 type)
 {
+	earjack = type;
 	touch_atomic_notifier_call(NOTIFY_EARJACK, &type);
 }
 EXPORT_SYMBOL(touch_notify_earjack);
 void touch_notify_fm_radio(u32 type)
 {
+	fm_radio = type;
 	touch_atomic_notifier_call(NOTIFY_FM_RADIO, &type);
 }
 EXPORT_SYMBOL(touch_notify_fm_radio);
+
+void touch_restore_state(struct touch_core_data *ts) {
+
+	TOUCH_TRACE();
+
+	if (atomic_read(&ts->state.connect) != connection) {
+		TOUCH_I("%s: need to restore connection (%d)\n", __func__, connection);
+		touch_notify_connect(connection);
+	}
+
+	if (atomic_read(&ts->state.wireless) != wireless) {
+		TOUCH_I("%s: need to restore wireless (%d)\n", __func__, wireless);
+		touch_notify_wireless(wireless);
+	}
+
+	if (atomic_read(&ts->state.earjack) != earjack) {
+		TOUCH_I("%s: need to restore earjack (%d)\n", __func__, earjack);
+		touch_notify_earjack(earjack);
+	}
+
+	if (atomic_read(&ts->state.fm_radio) != fm_radio) {
+		TOUCH_I("%s: need to restore fm_radio (%d)\n", __func__, fm_radio);
+		touch_notify_fm_radio(fm_radio);
+	}
+}
 
 static int touch_notify(struct touch_core_data *ts,
 				   unsigned long event, void *data)

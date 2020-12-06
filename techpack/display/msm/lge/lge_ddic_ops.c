@@ -358,6 +358,10 @@ char *lge_ddic_cmd_set_prop_map[LGE_DDIC_DSI_CMD_SET_MAX] = {
 	"lge,mdss-dsi-fp-lhbm-off-command",
 	"lge,mdss-dsi-fp-lhbm-aod-to-fps",
 	"lge,mdss-dsi-fp-lhbm-fps-to-aod",
+	"lge,mdss-dsi-ecc-on-command",
+	"lge,mdss-dsi-ecc-off-command",
+	"lge,mdss-dsi-daylight-on-command",
+	"lge,mdss-dsi-daylight-off-command",
 };
 
 char *lge_ddic_cmd_set_state_map[LGE_DDIC_DSI_CMD_SET_MAX] = {
@@ -426,6 +430,10 @@ char *lge_ddic_cmd_set_state_map[LGE_DDIC_DSI_CMD_SET_MAX] = {
 	"lge,mdss-dsi-fp-lhbm-off-command-state",
 	"lge,mdss-dsi-fp-lhbm-aod-to-fps-state",
 	"lge,mdss-dsi-fp-lhbm-fps-to-aod-state",
+	"lge,mdss-dsi-ecc-on-command-state",
+	"lge,mdss-dsi-ecc-off-command-state",
+	"lge,mdss-dsi-daylight-on-command-state",
+	"lge,mdss-dsi-daylight-off-command-state",
 };
 
 /* lge_ddic_dsi_panel_tx_cmd_set for LGE DSI CMD SETS*/

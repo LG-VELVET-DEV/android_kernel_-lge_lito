@@ -2151,6 +2151,14 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 
 	if (handler && handler->svdm_received) {
 		handler->svdm_received(handler, cmd, cmd_type, vdos, num_vdos);
+		switch (cmd) {
+		case DP_USBPD_VDM_CONFIGURE:
+			if (!handler->discovered)
+				handler->discovered = true;
+			break;
+		default:
+			break;
+		}
 
 		/* handle any previously queued TX */
 		if (pd->vdm_tx && !pd->sm_queued)

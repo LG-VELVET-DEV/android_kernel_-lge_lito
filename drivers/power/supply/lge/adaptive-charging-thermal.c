@@ -88,6 +88,7 @@ struct _actm_dt {
     int temp_criteria[ACTM_TEMP_SIZE_MAX];
     int wired_max_fcc[ACTM_TEMP_SIZE_MAX];
     int wired_curr[ACTM_TEMP_SIZE_MAX];
+    int wired_lcdoff_curr[ACTM_TEMP_SIZE_MAX];
     int cp_curr[ACTM_CP_TYPE_SIZE];
     int epp_pwr[ACTM_TEMP_SIZE_MAX];
     int bpp_pwr[ACTM_TEMP_SIZE_MAX];
@@ -102,6 +103,7 @@ struct _actm_dt {
 static struct _actm {
     bool enable;
     bool enable_cp_charging;
+    bool enable_seperated_wired_lcdoff;
     bool enable_on_chargerlogo;
     int mode;
     int cp_type;   // charger pump
@@ -111,6 +113,7 @@ static struct _actm {
     int epp_volt;  // it's from idtp9222 driver, mV
     int bpp_volt;  // it's from idtp9222 driver, mV
     int lcdon_temp_offset;
+    int wired_lcdon_temp_offset;
 
     struct _actm_dt dt[ACTM_CONN_MAX];  // 0-wired, 1-wirless
 
@@ -214,6 +217,7 @@ static void set_actm_mode(int mode)
 static int get_dt_temp(struct _actm_dt *dt, int stage)
 {
     int lcdon_offset = 0;
+    int conn = WIRED;
     int dt_temp = dt->temp_criteria[stage];
     int dt_temp_offset = 0;
     int ret = dt_temp;
@@ -221,10 +225,19 @@ static int get_dt_temp(struct _actm_dt *dt, int stage)
     const char str_stage[5][20] =
         {"none", "cold zone", "normal zone", "warm zone", "hot zone"};
 
-    if (actm_me.get_actm_param(
-        VENEER_FEED_ACTM_LCDON_TEMP_OFFSET, &lcdon_offset)) {
-        pr_actm(ERROR, "get_actm_param(lcdon temp offset) failure, error\n");
-        lcdon_offset = 0;
+
+    if (actm_me.conn == CHARGING_SUPPLY_WIRELESS_9W
+        || actm_me.conn == CHARGING_SUPPLY_WIRELESS_5W)
+        conn = WIRELESS;
+
+    if (actm_me.enable_seperated_wired_lcdoff && conn == WIRED) {
+        lcdon_offset = is_lcdon() ? actm_me.wired_lcdon_temp_offset : 0;
+    } else {
+        if (actm_me.get_actm_param(
+            VENEER_FEED_ACTM_LCDON_TEMP_OFFSET, &lcdon_offset)) {
+            pr_actm(ERROR, "get_actm_param(lcdon temp offset) failure, error\n");
+            lcdon_offset = 0;
+        }
     }
     actm_me.lcdon_temp_offset = lcdon_offset;
 
@@ -243,9 +256,10 @@ static int get_dt_temp(struct _actm_dt *dt, int stage)
     return ret;
 }
 
-static int get_dt_min_current(int stage)
+static int get_dt_min_current(int stage, bool now_max_curr)
 {
     int local_stage = stage;
+    int wired_curr;
 
     if (local_stage > ACTM_STAGE_NORMAL &&
         get_actm_mode() == ACTM_MODE_CHARGING) {
@@ -265,15 +279,19 @@ static int get_dt_min_current(int stage)
         return actm_me.dt[WIRELESS].bpp_pwr[local_stage];
     }
     else {
-        if (actm_me.enable_cp_charging && local_stage == ACTM_STAGE_NORMAL) {
-            if (actm_me.cp_type < CP_NONE) {
-                return min(
-                    actm_me.dt[WIRED].cp_curr[actm_me.cp_type],
-                    actm_me.dt[WIRED].wired_max_fcc[actm_me.cp_type]);
-            }
+        if (actm_me.enable_cp_charging
+                && local_stage == ACTM_STAGE_NORMAL
+                && actm_me.cp_type < CP_NONE) {
+            wired_curr  = actm_me.dt[WIRED].cp_curr[actm_me.cp_type];
+        } else if (actm_me.enable_seperated_wired_lcdoff
+                && !now_max_curr
+                && !is_lcdon()) {
+            wired_curr =  actm_me.dt[WIRED].wired_lcdoff_curr[local_stage];
+        } else {
+            wired_curr =  actm_me.dt[WIRED].wired_curr[local_stage];
         }
-        return min(
-            actm_me.dt[WIRED].wired_curr[local_stage],
+
+        return min(wired_curr,
             actm_me.dt[WIRED].wired_max_fcc[actm_me.cp_type]);
     }
 
@@ -372,9 +390,10 @@ static void set_actm_stage(struct _actm_dt *dt, int stage, int temp)
             actm_me.ref_temp = get_dt_temp(dt, stage);
 
         if (stage > ACTM_STAGE_NORMAL) {
-            init_current = get_dt_min_current((stage - 1));
+            init_current = get_dt_min_current((stage - 1),1);
             set_actm_current(init_current);
         }
+
         pr_actm(UPDATE, "%s: new stage: %s, init current: %d\n",
             str_mode[max(get_actm_mode() + 2, 0)],
             str_stage[max(stage + 2, 0)], init_current);
@@ -489,7 +508,7 @@ static int actm_act(struct _actm_dt *dt, int policy, int temp)
 
     int curr_step = find_current_step(dt, actm_me.ref_temp, temp);
 
-    now_min_curr = get_dt_min_current(actm_me.now_stage);
+    now_min_curr = get_dt_min_current(actm_me.now_stage,0);
 
     if (actm_me.conn == CHARGING_SUPPLY_WIRELESS_9W
         || actm_me.conn == CHARGING_SUPPLY_WIRELESS_5W) {
@@ -534,15 +553,28 @@ static int actm_act(struct _actm_dt *dt, int policy, int temp)
 
     switch (policy) {
         case TEMP_POLICY_HOLD:
-            actm_me.hold_count++;
-            curr_step = 0;
+            /*guarantee min current */
+            set_curr = max(now_curr, now_min_curr);
+            /*guarantee max current */
+            if (actm_me.now_stage > ACTM_STAGE_NORMAL)
+                set_curr = min(set_curr, get_dt_min_current((actm_me.now_stage - 1),1));
+
+            if (set_curr != now_curr) {
+                actm_me.hold_count = 0;
+                curr_step = set_curr-now_curr;
+                update_ref_temp_flag = true;
+                set_actm_current(set_curr);
+            } else {
+                actm_me.hold_count++;
+                curr_step = 0;
+            }
             break;
         case TEMP_POLICY_CURRENT_UP:
             actm_me.hold_count = 0;
 
             set_curr = max(now_curr + curr_step, now_min_curr);
             if (actm_me.now_stage > ACTM_STAGE_NORMAL)
-                set_curr = min(set_curr, get_dt_min_current(actm_me.now_stage - 1));
+                set_curr = min(set_curr, get_dt_min_current((actm_me.now_stage - 1),1));
 
             if (now_curr == 0 || set_curr > now_curr) {
                 update_ref_temp_flag = true;
@@ -554,9 +586,9 @@ static int actm_act(struct _actm_dt *dt, int policy, int temp)
 
             set_curr = max(now_curr - curr_step, now_min_curr);
             if (actm_me.now_stage > ACTM_STAGE_NORMAL)
-                set_curr = min(set_curr, get_dt_min_current(actm_me.now_stage - 1));
+                set_curr = min(set_curr, get_dt_min_current((actm_me.now_stage - 1),1));
 
-            if (now_curr == 0 || set_curr < now_curr) {
+            if (now_curr == 0 || set_curr != now_curr) {
                 update_ref_temp_flag = true;
                 set_actm_current(set_curr);
             }
@@ -567,8 +599,8 @@ static int actm_act(struct _actm_dt *dt, int policy, int temp)
             curr_step = find_current_step(dt, get_dt_temp(dt, actm_me.now_stage), temp);
             set_curr = max(now_curr - curr_step, now_min_curr);
             if (actm_me.now_stage > ACTM_STAGE_NORMAL) {
-                set_curr = min(set_curr, get_dt_min_current(actm_me.now_stage - 1));
-                if (now_curr == 0 || set_curr < now_curr) {
+                set_curr = min(set_curr, get_dt_min_current((actm_me.now_stage - 1),1));
+                if (now_curr == 0 || set_curr != now_curr) {
                     update_ref_temp_flag = true;
                     set_actm_current(set_curr);
                 }
@@ -638,7 +670,10 @@ static void update_actm_param(int conn)
     if (conn == WIRED) {
         actm_me.get_actm_param(
             VENEER_FEED_ACTM_SENSOR_WIRED, &param_temp);
-        if (param_temp == 1 || param_temp == 2 || param_temp == 3)
+        if (param_temp ==  1 || param_temp ==  2 || param_temp ==  3 ||
+            param_temp == 11 || param_temp == 12 || param_temp == 13 ||
+            param_temp == 21 || param_temp == 22 || param_temp == 23 ||
+            param_temp == 31 || param_temp == 32 || param_temp == 33 )
             actm_me.dt[conn].therm_type = param_temp;
         else
             actm_me.dt[conn].therm_type = 3;
@@ -712,7 +747,10 @@ static void update_actm_param(int conn)
     else if (actm_me.conn == CHARGING_SUPPLY_WIRELESS_9W) {
         actm_me.get_actm_param(
             VENEER_FEED_ACTM_SENSOR_WIRELESS, &param_temp);
-        if (param_temp == 1 || param_temp == 2 || param_temp == 3)
+        if (param_temp ==  1 || param_temp ==  2 || param_temp ==  3 ||
+            param_temp == 11 || param_temp == 12 || param_temp == 13 ||
+            param_temp == 21 || param_temp == 22 || param_temp == 23 ||
+            param_temp == 31 || param_temp == 32 || param_temp == 33 )
             actm_me.dt[conn].therm_type = param_temp;
         else
             actm_me.dt[conn].therm_type = 3;
@@ -797,18 +835,38 @@ static void update_actm_param(int conn)
     }
 }
 
+static int actm_temp_sensor(int conn, int *temp_in, int *temp_out)
+{
+    int therm_type = 0;
+
+    if (is_lcdon())
+        therm_type = actm_me.dt[conn].therm_type / 10; /* lcd on  */
+    else
+        therm_type = actm_me.dt[conn].therm_type % 10; /* lcd off */
+
+    if (therm_type <= 0)
+        therm_type = actm_me.dt[conn].therm_type % 10;
+
+    if (therm_type & ACTM_SENSOR_BATT)
+        temp_out[BATT] = temp_in[BATT];
+    if (therm_type & ACTM_SENSOR_VTS)
+        temp_out[VTS] = temp_in[VTS];
+
+    return therm_type;
+}
 static void actm_status_work(struct work_struct* work)
 {
     int temp[2] = {ACTM_INITVAL, }, conn = DISCHG;
     int temp_buf[ACTM_THERM_MAX] = {0, };
     int conn_buf = 0, status_buf = 0, mode = 0, now_fcc = 0;
+    int therm_sensor = 0;
 
     const char str_cp_type[3][8] =
         {"CP_PPS", "CP_QC3", "CP_NONE"};
     const char str_status[5][8] =
         {"Unknown", "chg", "dischg", "not_chg", "full"};
     const char str_sensor_type[4][8] =
-        {"Unknown", "BATT", "VTS", "BOTH"};
+        {"Unknown", "BATT", "VTS", "MAX"};
     const char str_charger[CHARGING_SUPPLY_MAX][13] = {
         "UNKNOWN", "FLOAT", "NONE",
 	    "DCP_DEFAULT", "DCP_10K", "DCP_22K", "QC2", "QC3",
@@ -894,17 +952,13 @@ static void actm_status_work(struct work_struct* work)
     actm_me.conn = conn_buf;
 
     update_actm_param(conn);
-
-    if (actm_me.dt[conn].therm_type & ACTM_SENSOR_BATT)
-        temp[BATT] = temp_buf[BATT];
-    if (actm_me.dt[conn].therm_type & ACTM_SENSOR_VTS)
-        temp[VTS] = temp_buf[VTS];
+    therm_sensor = actm_temp_sensor(conn, temp_buf, temp);
 
     pr_actm(UPDATE,
         ">>>>> charger: %s(%s, %s), type:%s, Temp:%d (batt:%d, vts:%d) <<<<<\n",
         str_charger[conn_buf], str_cp_type[actm_me.cp_type],
         (status_buf == POWER_SUPPLY_STATUS_CHARGING) ? "CHG" : "DISCHG",
-        str_sensor_type[actm_me.dt[conn].therm_type],
+        str_sensor_type[therm_sensor],
         max(temp[BATT], temp[VTS]), temp_buf[BATT], temp_buf[VTS]);
 
     if (actm_me.active == false) {
@@ -981,6 +1035,8 @@ static bool actm_parse_dt(struct device_node* dnode)
         of_property_read_bool(dnode, "lge,actm-enable");
     actm_me.enable_cp_charging =
         of_property_read_bool(dnode, "lge,actm-enable-cp-charging");
+    actm_me.enable_seperated_wired_lcdoff =
+        of_property_read_bool(dnode, "lge,actm-enable-seperated-wired-lcdoff");
     actm_me.enable_on_chargerlogo =
         of_property_read_bool(dnode, "lge,actm-enable-on-chargerlogo");
 
@@ -1078,6 +1134,25 @@ static bool actm_parse_dt(struct device_node* dnode)
             if (rc)
                 pr_actm(ERROR,
                     "lge,lge,wired-curr-cp-limit-ma failure, error. %d\n", rc);
+        }
+
+        if (actm_me.enable_seperated_wired_lcdoff) {
+            rc |= of_property_read_u32_array(dnode,
+		        "lge,wired-curr-lcdoff-limit-ma",
+                actm_me.dt[WIRED].wired_lcdoff_curr, (actm_me.dt[WIRED].stage_size));
+            if (rc)
+                pr_actm(ERROR,
+                    "lge,wired-curr-lcdoff-limit-ma failure, error. %d\n", rc);
+            rc |= of_property_read_u32(dnode,
+		        "lge,actm-wired-lcdon-temp-offset", &actm_me.wired_lcdon_temp_offset);
+            if (rc)
+                pr_actm(ERROR, "lge,actm-wired-lcdon-temp-offset failure, error. %d\n", rc);
+            pr_actm(MONITOR,
+		        "[wired][enable_seperated_wired_lcdoff] (curr : %d, %d, %d) (offset:%d)",
+				actm_me.dt[WIRED].wired_lcdoff_curr[0],
+				actm_me.dt[WIRED].wired_lcdoff_curr[1],
+				actm_me.dt[WIRED].wired_lcdoff_curr[2],
+				actm_me.wired_lcdon_temp_offset);
         }
 
         rc |= of_property_read_u32_array(dnode,

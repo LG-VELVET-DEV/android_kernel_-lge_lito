@@ -176,7 +176,9 @@ struct qpnp_qg {
 	unsigned long		suspend_time;
 	struct iio_channel	*batt_therm_chan;
 	struct iio_channel	*batt_id_chan;
-
+#ifdef CONFIG_LGE_PM
+	bool		in_esr_process;
+#endif
 	/* soc params */
 	int			catch_up_soc;
 	int			maint_soc;

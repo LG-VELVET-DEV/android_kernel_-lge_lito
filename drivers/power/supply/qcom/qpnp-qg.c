@@ -1067,7 +1067,9 @@ static int qg_esr_estimate(struct qpnp_qg *chip)
 		pr_err("Failed to hold master, rc=%d\n", rc);
 		goto done;
 	}
-
+#ifdef CONFIG_LGE_PM
+	chip->in_esr_process = true;
+#endif
 	for (i = 0; i < qg_esr_count; i++) {
 		/* Fire ESR measurement */
 		rc = qg_masked_write(chip,
@@ -1176,9 +1178,14 @@ static int qg_esr_estimate(struct qpnp_qg *chip)
 		qg_retrieve_esr_params(chip);
 		chip->esr_actual = chip->esr_avg;
 	}
-
+#ifdef CONFIG_LGE_PM
+	chip->in_esr_process = false;
+#endif
 	return 0;
 done:
+#ifdef CONFIG_LGE_PM
+	chip->in_esr_process = false;
+#endif
 	qg_master_hold(chip, false);
 	return rc;
 }
@@ -4704,6 +4711,9 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	chip->esr_actual = -EINVAL;
 	chip->esr_nominal = -EINVAL;
 	chip->batt_age_level = -EINVAL;
+#ifdef CONFIG_LGE_PM
+	chip->in_esr_process = false;
+#endif
 
 	qg_create_debugfs(chip);
 
